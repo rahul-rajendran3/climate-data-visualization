@@ -8,4 +8,4 @@ CORS(app)
 app.register_blueprint(climate_data_bp)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5001)
