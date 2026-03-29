@@ -123,6 +123,7 @@ function ChoroplethMap() {
                     }
                     if (metaJson.years?.length) {
                         setYear(metaJson.years[metaJson.years.length - 1])
+                        setScatterYear(metaJson.years[0])
                     }
                     if (metaJson.metrics.length >= 3) {
                         setXMetric(metaJson.metrics[0])
@@ -447,6 +448,27 @@ function ChoroplethMap() {
                 setTooltip(null)
             })
     }, [world, mapRecords, valueStats.max, valueStats.min])
+
+    useEffect(() => {
+        if (!isPlaying || !meta?.years?.length) return
+    
+        const interval = setInterval(() => {
+            setScatterYear((prev) => {
+                const years = meta.years
+                const currentIndex = years.indexOf(prev ?? -1)
+                const nextIndex = currentIndex + 1
+    
+                if (nextIndex >= years.length) {
+                    setIsPlaying(false)
+                    return prev
+                }
+    
+                return years[nextIndex]
+            })
+        }, 800)
+    
+        return () => clearInterval(interval)
+    }, [isPlaying, meta])
 
     return (
         <div style={{ padding: 16 }}>
