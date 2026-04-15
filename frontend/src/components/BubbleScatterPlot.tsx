@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as d3 from 'd3'
+import { formatMetric } from '../utils'
 
 type ClimateMeta = {
     years: number[]
@@ -221,7 +222,7 @@ function BubbleScatterPlot() {
             .attr('fill', '#374151')
             .style('font-size', '14px')
             .style('font-weight', '500')
-            .text(xMetric.replaceAll('_', ' '))
+            .text(formatMetric(xMetric))
 
         svg.append('text')
             .attr('transform', 'rotate(-90)')
@@ -231,7 +232,7 @@ function BubbleScatterPlot() {
             .attr('fill', '#374151')
             .style('font-size', '14px')
             .style('font-weight', '500')
-            .text(yMetric.replaceAll('_', ' '))
+            .text(formatMetric(yMetric))
 
         const bubbleGroup = svg.append('g')
 
@@ -311,7 +312,7 @@ function BubbleScatterPlot() {
                         X Axis
                         <select value={xMetric} onChange={(e) => setXMetric(e.target.value)} disabled={!meta}>
                             {(meta?.metrics ?? []).map((m) => (
-                                <option key={m} value={m}>{m}</option>
+                                <option key={m} value={m}>{formatMetric(m)}</option>
                             ))}
                         </select>
                     </label>
@@ -320,7 +321,7 @@ function BubbleScatterPlot() {
                         Y Axis
                         <select value={yMetric} onChange={(e) => setYMetric(e.target.value)} disabled={!meta}>
                             {(meta?.metrics ?? []).map((m) => (
-                                <option key={m} value={m}>{m}</option>
+                                <option key={m} value={m}>{formatMetric(m)}</option>
                             ))}
                         </select>
                     </label>
@@ -329,7 +330,7 @@ function BubbleScatterPlot() {
                         Bubble Size
                         <select value={sizeMetric} onChange={(e) => setSizeMetric(e.target.value)} disabled={!meta}>
                             {(meta?.metrics ?? []).map((m) => (
-                                <option key={m} value={m}>{m}</option>
+                                <option key={m} value={m}>{formatMetric(m)}</option>
                             ))}
                         </select>
                     </label>
@@ -399,9 +400,9 @@ function BubbleScatterPlot() {
                     }}
                 >
                     <div style={{ fontWeight: 700, marginBottom: 4 }}>{scatterTooltip.country}</div>
-                    <div>{xMetric}: {scatterTooltip.xValue.toFixed(2)}</div>
-                    <div>{yMetric}: {scatterTooltip.yValue.toFixed(2)}</div>
-                    <div>{sizeMetric}: {scatterTooltip.sizeValue.toFixed(2)}</div>
+                    <div>{formatMetric(xMetric)}: {scatterTooltip.xValue.toFixed(2)}</div>
+                    <div>{formatMetric(yMetric)}: {scatterTooltip.yValue.toFixed(2)}</div>
+                    <div>{formatMetric(sizeMetric)}: {scatterTooltip.sizeValue.toFixed(2)}</div>
                 </div>
             ) : null}
         </>

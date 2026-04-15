@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
+import { formatMetric } from '../utils'
 
 type ClimatePoint = {
     country: string
@@ -180,13 +181,6 @@ function ChoroplethMap() {
             .attr('stroke', '#ffffff')
             .attr('stroke-width', 0.6)
 
-        countryPaths
-            .append('title')
-            .text((d) => {
-                const name = d.properties?.name ?? 'Unknown'
-                const val = dataMap.get(name)
-                return typeof val === 'number' ? `${name}: ${val.toFixed(2)}` : `${name}: no data`
-            })
 
         countryPaths
             .on('mousemove', (event: MouseEvent, d) => {
@@ -221,7 +215,7 @@ function ChoroplethMap() {
                     Metric
                     <select value={metric} onChange={(e) => setMetric(e.target.value)} disabled={!meta}>
                         {(meta?.metrics ?? []).map((m) => (
-                            <option key={m} value={m}>{m}</option>
+                            <option key={m} value={m}>{formatMetric(m)}</option>
                         ))}
                     </select>
                 </label>
@@ -240,7 +234,7 @@ function ChoroplethMap() {
                 </label>
 
                 <div>
-                    <div className="legend-label">{metric || 'metric'} ({year ?? 'latest'})</div>
+                    <div className="legend-label">{metric ? formatMetric(metric) : 'Metric'} ({year ?? 'latest'})</div>
                     <div className="legend-bar" />
                     <div className="legend-range">
                         <span>{valueStats.min.toFixed(2)}</span>
@@ -269,7 +263,7 @@ function ChoroplethMap() {
                     }}
                 >
                     <div style={{ fontWeight: 600 }}>{tooltip.country}</div>
-                    <div>{tooltip.value === null ? 'No data' : `${metric}: ${tooltip.value.toFixed(2)}`}</div>
+                    <div>{tooltip.value === null ? 'No data' : `${formatMetric(metric)}: ${tooltip.value.toFixed(2)}`}</div>
                 </div>
             ) : null}
         </div>
