@@ -205,59 +205,49 @@ function ChoroplethMap() {
     }, [world, mapRecords, valueStats.max, valueStats.min])
 
     return (
-        <div style={{ padding: 16 }}>
-            <h2 style={{ marginBottom: 12 }}>Global Climate Choropleth</h2>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="choropleth-layout">
+            <div className="choropleth-map-area">
+                <h2>Global Climate Choropleth</h2>
+                {error ? <p style={{ color: '#b00020', margin: '0 0 8px' }}>{error}</p> : null}
+                <div style={{ position: 'relative', width: '100%', flex: 1 }}>
+                    <svg ref={svgRef} style={{ width: '100%', maxWidth: 980, display: 'block' }} />
+                </div>
+            </div>
+
+            <div className="map-sidebar">
+                <h3>Controls</h3>
+
                 <label>
-                    Metric{' '}
+                    Metric
                     <select value={metric} onChange={(e) => setMetric(e.target.value)} disabled={!meta}>
                         {(meta?.metrics ?? []).map((m) => (
-                            <option key={m} value={m}>
-                                {m}
-                            </option>
+                            <option key={m} value={m}>{m}</option>
                         ))}
                     </select>
                 </label>
 
                 <label>
-                    Year{' '}
+                    Year
                     <select
                         value={year ?? ''}
                         onChange={(e) => setYear(Number(e.target.value))}
                         disabled={!meta || (meta.years?.length ?? 0) === 0}
                     >
                         {(meta?.years ?? []).map((y) => (
-                            <option key={y} value={y}>
-                                {y}
-                            </option>
+                            <option key={y} value={y}>{y}</option>
                         ))}
                     </select>
                 </label>
-            </div>
 
-            <div style={{ marginBottom: 10, maxWidth: 420 }}>
-                <div style={{ marginBottom: 6, fontSize: 13 }}>
-                    Color legend for {metric || 'selected metric'} ({year ?? 'latest'})
+                <div>
+                    <div className="legend-label">{metric || 'metric'} ({year ?? 'latest'})</div>
+                    <div className="legend-bar" />
+                    <div className="legend-range">
+                        <span>{valueStats.min.toFixed(2)}</span>
+                        <span>{valueStats.max.toFixed(2)}</span>
+                    </div>
+                    <div className="legend-note">Gray = missing data</div>
                 </div>
-                <div
-                    style={{
-                        height: 14,
-                        borderRadius: 999,
-                        border: '1px solid #d0d0d0',
-                        background: 'linear-gradient(90deg, #ffffcc 0%, #fd8d3c 55%, #bd0026 100%)',
-                    }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 12 }}>
-                    <span>{valueStats.min.toFixed(2)}</span>
-                    <span>{valueStats.max.toFixed(2)}</span>
-                </div>
-                <div style={{ marginTop: 4, fontSize: 12, color: '#555' }}>Gray countries indicate missing data.</div>
-            </div>
-
-            {error ? <p style={{ color: '#b00020' }}>{error}</p> : null}
-
-            <div style={{ position: 'relative', width: '100%', maxWidth: 980 }}>
-                <svg ref={svgRef} style={{ width: '100%', maxWidth: 980, border: '1px solid #ddd' }} />
             </div>
 
             {tooltip ? (
@@ -267,21 +257,21 @@ function ChoroplethMap() {
                         left: tooltip.x + 14,
                         top: tooltip.y + 14,
                         pointerEvents: 'none',
-                        background: '#111827',
-                        color: '#fff',
+                        background: '#ffffff',
+                        color: '#1f2937',
                         padding: '8px 10px',
                         borderRadius: 8,
                         fontSize: 12,
                         lineHeight: 1.4,
-                        boxShadow: '0 8px 20px rgba(0,0,0,0.22)',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                        border: '1px solid #e5e7eb',
                         zIndex: 10,
                     }}
                 >
-                    <div>{tooltip.country}</div>
+                    <div style={{ fontWeight: 600 }}>{tooltip.country}</div>
                     <div>{tooltip.value === null ? 'No data' : `${metric}: ${tooltip.value.toFixed(2)}`}</div>
                 </div>
             ) : null}
-
         </div>
     )
 }
