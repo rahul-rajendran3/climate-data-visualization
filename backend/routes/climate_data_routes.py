@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 import os
 import pandas as pd
 from services.kaggle_service import kaggle_service
+from services.reliefweb_service import reliefweb_service
 
 climate_data_bp = Blueprint('climate_data_bp', __name__)
 
@@ -115,4 +116,52 @@ def climate_map():
             "records": records,
         }), 200
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@climate_data_bp.route('/api/climate-news')
+def climate_news():
+    """Return latest climate change news coverage for a hovered region.
+
+    Query params:
+    - country: country/region name (required; comes from GeoJSON feature properties)
+    - limit: number of articles (optional; default 5; capped)
+    """
+
+    country = (request.args.get('country') or '').strip()
+    if not country:
+        return jsonify({"error": "Missing required query param: country"}), 400
+
+    limit = request.args.get('limit', '5')
+    try:
+        limit_int = int(limit)
+    except ValueError:
+        return jsonify({"error": "limit must be an integer"}), 400
+
+    try:
+        articles = reliefweb_service.get_latest_climate_news(country, limit=limit_int)
+        return jsonify({
+            "country": country,
+            "query": f"climate change {country}",
+            "articles": articles,
+        }), 200
+    except PermissionError as e:
+        cached = reliefweb_service.get_cached_latest_climate_news(country, limit=limit_int, allow_expired=True)
+        if cached:
+            return jsonify({
+                "country": country,
+                "query": f"climate change {country}",
+                "articles": cached,
+                "warning": "ReliefWeb access denied; showing cached results.",
+            }), 200
+        return jsonify({"error": str(e)}), 502
+    except Exception as e:
+        cached = reliefweb_service.get_cached_latest_climate_news(country, limit=limit_int, allow_expired=True)
+        if cached:
+            return jsonify({
+                "country": country,
+                "query": f"climate change {country}",
+                "articles": cached,
+                "warning": "ReliefWeb error; showing cached results.",
+            }), 200
         return jsonify({"error": str(e)}), 500
