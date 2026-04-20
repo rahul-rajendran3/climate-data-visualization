@@ -30,6 +30,11 @@ function App() {
                 key={id}
                 type="button"
                 className={`view-nav__btn${activeView === id ? ' view-nav__btn--active' : ''}`}
+                onPointerDown={(e) => {
+                  if (e.button !== 0) return
+                  e.preventDefault()
+                  setActiveView(id)
+                }}
                 onClick={() => setActiveView(id)}
               >
                 {label}
@@ -50,13 +55,13 @@ function App() {
       </header>
 
       <main className="app-content">
-        <section className="hero-section">
+        {/* <section className="hero-section">
           <p className="hero-section__text">
             Climate change is a serious issue that is arising, but it is important
             for everyone to know why it is happening, how it affects the world,
             and what we can do about it.
           </p>
-        </section>
+        </section> */}
 
         {activeView === 'choropleth' && (
           <div className="section-card">

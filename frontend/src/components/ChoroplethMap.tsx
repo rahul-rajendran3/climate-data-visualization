@@ -82,6 +82,7 @@ function ChoroplethMap() {
     const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
     const [hoverCountry, setHoverCountry] = useState<string | null>(null)
+    const [pendingHoverCountry, setPendingHoverCountry] = useState<string | null>(null)
     const [pinnedCountry, setPinnedCountry] = useState<string | null>(null)
     const pinnedCountryRef = useRef<string | null>(null)
     const selectedCountry = pinnedCountry ?? hoverCountry
@@ -91,10 +92,45 @@ function ChoroplethMap() {
     const [newsError, setNewsError] = useState<string>('')
     const [newsWarning, setNewsWarning] = useState<string>('')
     const newsCacheRef = useRef<Map<string, { articles: NewsArticle[]; warning?: string }>>(new Map())
+    const newsListRef = useRef<HTMLOListElement | null>(null)
 
     useEffect(() => {
         pinnedCountryRef.current = pinnedCountry
     }, [pinnedCountry])
+
+    useEffect(() => {
+        const el = newsListRef.current
+        if (!el) return
+
+        const raf = window.requestAnimationFrame(() => {
+            if (newsListRef.current) {
+                newsListRef.current.scrollTop = 0
+            }
+        })
+
+        return () => {
+            window.cancelAnimationFrame(raf)
+        }
+    }, [selectedCountry])
+
+    useEffect(() => {
+        if (pinnedCountry !== null) {
+            setPendingHoverCountry(null)
+            return
+        }
+
+        if (!pendingHoverCountry) return
+        if (pendingHoverCountry === hoverCountry) return
+
+        const timer = window.setTimeout(() => {
+            if (pinnedCountryRef.current !== null) return
+            setHoverCountry(pendingHoverCountry)
+        }, 350)
+
+        return () => {
+            window.clearTimeout(timer)
+        }
+    }, [pendingHoverCountry, pinnedCountry, hoverCountry])
 
     const valueStats = useMemo(() => {
         const values = mapRecords.map((r) => r.value).filter((v) => Number.isFinite(v))
@@ -222,7 +258,7 @@ function ChoroplethMap() {
                 const countryName = d.properties?.name ?? ''
                 if (!countryName) return
                 if (!pinnedCountryRef.current) {
-                    setHoverCountry(countryName)
+                    setPendingHoverCountry(countryName)
                 }
             })
             .on('click', (_event: MouseEvent, d) => {
@@ -230,6 +266,7 @@ function ChoroplethMap() {
                 if (!countryName) return
                 setPinnedCountry((prev) => (prev === countryName ? null : countryName))
                 setHoverCountry(countryName)
+                setPendingHoverCountry(null)
             })
             .on('mousemove', (event: MouseEvent, d) => {
                 const countryName = d.properties?.name ?? 'Unknown'
@@ -265,12 +302,11 @@ function ChoroplethMap() {
         }
 
         const controller = new AbortController()
-        const isHoverSelection = pinnedCountry === null
-        const delayMs = isHoverSelection ? 250 : 0
 
         setNewsLoading(true)
         setNewsError('')
         setNewsWarning('')
+        setNewsArticles([])
 
         const timer = window.setTimeout(async () => {
             try {
@@ -300,7 +336,7 @@ function ChoroplethMap() {
                     setNewsLoading(false)
                 }
             }
-        }, delayMs)
+        }, 0)
 
         return () => {
             window.clearTimeout(timer)
@@ -313,8 +349,8 @@ function ChoroplethMap() {
             <div className="choropleth-map-area">
                 <h2>Global Climate Choropleth</h2>
                 {error ? <p style={{ color: '#b00020', margin: '0 0 8px' }}>{error}</p> : null}
-                <div style={{ position: 'relative', width: '100%', flex: 1 }}>
-                    <svg ref={svgRef} style={{ width: '100%', maxWidth: 980, display: 'block' }} />
+                <div className="choropleth-map-frame">
+                    <svg ref={svgRef} className="choropleth-map-svg" />
                 </div>
             </div>
 
@@ -353,7 +389,7 @@ function ChoroplethMap() {
                     <div className="legend-note">Gray = missing data</div>
                 </div>
 
-                <div>
+                <div className="news-panel">
                     <div className="news-header">
                         <div className="news-title">Latest News</div>
                         <button
@@ -368,30 +404,49 @@ function ChoroplethMap() {
                             {pinnedCountry ? 'Unpin' : 'Pin'}
                         </button>
                     </div>
+                    {selectedCountry ? (
+                        <div className="news-hint">
+                            Click a country on the map to pin/unpin.
+                        </div>
+                    ) : null}
 
                     <div className="news-country">
                         {selectedCountry ? selectedCountry : 'Hover a country'}
                     </div>
 
                     {!selectedCountry ? <div className="news-hint">Hover on the map to preview headlines.</div> : null}
-                    {newsLoading ? <div className="news-hint">Loading…</div> : null}
+
                     {newsError ? <div className="news-error">{newsError}</div> : null}
                     {newsWarning ? <div className="news-warning">{newsWarning}</div> : null}
 
-                    {!newsLoading && !newsError && selectedCountry ? (
-                        newsArticles.length ? (
-                            <ol className="news-list">
-                                {newsArticles.map((a) => (
+                    {selectedCountry ? (
+                        <ol
+                            key={selectedCountry}
+                            ref={newsListRef}
+                            className="news-list"
+                        >
+                            {newsLoading ? (
+                                <li className="news-item">
+                                    <span className="news-hint">Loading…</span>
+                                </li>
+                            ) : newsError ? (
+                                <li className="news-item">
+                                    <span className="news-error">Unable to load headlines.</span>
+                                </li>
+                            ) : newsArticles.length ? (
+                                newsArticles.map((a) => (
                                     <li key={a.url} className="news-item">
                                         <a className="news-link" href={a.url} target="_blank" rel="noreferrer">
                                             {a.title}
                                         </a>
                                     </li>
-                                ))}
-                            </ol>
-                        ) : (
-                            <div className="news-hint">No recent results found.</div>
-                        )
+                                ))
+                            ) : (
+                                <li className="news-item">
+                                    <span className="news-hint">No recent results found.</span>
+                                </li>
+                            )}
+                        </ol>
                     ) : null}
                 </div>
             </div>
