@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as d3 from 'd3'
+import { formatMetric } from '../utils'
 
 type ClimateMeta = {
     years: number[]
@@ -107,17 +108,15 @@ function BubbleScatterPlot() {
                     filtered,
                     (rows: any[]) => ({
                         country: rows[0].country,
-                        x: d3.mean(rows, (r: any) => Number(r[xMetric])) ?? 0,
-                        y: d3.mean(rows, (r: any) => Number(r[yMetric])) ?? 0,
-                        size: d3.mean(rows, (r: any) => Number(r[sizeMetric])) ?? 0,
+                        x: d3.mean(rows, (r) => Number(r[xMetric])) ?? 0,
+                        y: d3.mean(rows, (r) => Number(r[yMetric])) ?? 0,
+                        size: d3.mean(rows, (r) => Number(r[sizeMetric])) ?? 0,
                     }),
                     (d: any) => d.country
-                ) as Array<[string, ScatterPoint]>
-
-                const points = grouped.map(([, value]: [string, ScatterPoint]) => value)
+                ).map(([, value]) => value)
 
                 if (!cancelled) {
-                    setScatterRecords(points)
+                    setScatterRecords(grouped)
                     setScatterError('')
                 }
             } catch (e) {
@@ -145,9 +144,9 @@ function BubbleScatterPlot() {
 
         if (!scatterRecords.length) return
 
-    const xExtent = d3.extent(scatterRecords, (d: ScatterPoint) => d.x) as [number, number]
-    const yExtent = d3.extent(scatterRecords, (d: ScatterPoint) => d.y) as [number, number]
-    const sizeExtent = d3.extent(scatterRecords, (d: ScatterPoint) => d.size) as [number, number]
+        const xExtent = d3.extent(scatterRecords, (d) => d.x) as [number, number]
+        const yExtent = d3.extent(scatterRecords, (d) => d.y) as [number, number]
+        const sizeExtent = d3.extent(scatterRecords, (d) => d.size) as [number, number]
 
         const xPad = (xExtent[1] - xExtent[0]) * 0.08 || 1
         const yPad = (yExtent[1] - yExtent[0]) * 0.08 || 1
@@ -180,8 +179,8 @@ function BubbleScatterPlot() {
                     .tickFormat(() => '')
             )
             .selectAll('line')
-            .attr('stroke', '#273142')
-            .attr('stroke-opacity', 0.7)
+            .attr('stroke', '#e2e8ef')
+            .attr('stroke-opacity', 1)
 
         svg.append('g')
             .attr('transform', `translate(${margin.left},0)`)
@@ -192,8 +191,8 @@ function BubbleScatterPlot() {
                     .tickFormat(() => '')
             )
             .selectAll('line')
-            .attr('stroke', '#273142')
-            .attr('stroke-opacity', 0.7)
+            .attr('stroke', '#e2e8ef')
+            .attr('stroke-opacity', 1)
 
         svg.selectAll('.domain').remove()
 
@@ -206,49 +205,49 @@ function BubbleScatterPlot() {
             .call(yAxis)
 
         xAxisGroup.selectAll('text')
-            .attr('fill', '#94a3b8')
+            .attr('fill', '#6b7280')
             .style('font-size', '12px')
 
         yAxisGroup.selectAll('text')
-            .attr('fill', '#94a3b8')
+            .attr('fill', '#6b7280')
             .style('font-size', '12px')
 
-        xAxisGroup.selectAll('line').attr('stroke', '#475569')
-        yAxisGroup.selectAll('line').attr('stroke', '#475569')
+        xAxisGroup.selectAll('line').attr('stroke', '#d1d5db')
+        yAxisGroup.selectAll('line').attr('stroke', '#d1d5db')
 
         svg.append('text')
             .attr('x', width / 2)
             .attr('y', height - 22)
             .attr('text-anchor', 'middle')
-            .attr('fill', '#cbd5e1')
+            .attr('fill', '#374151')
             .style('font-size', '14px')
             .style('font-weight', '500')
-            .text(xMetric.replaceAll('_', ' '))
+            .text(formatMetric(xMetric))
 
         svg.append('text')
             .attr('transform', 'rotate(-90)')
             .attr('x', -height / 2)
             .attr('y', 28)
             .attr('text-anchor', 'middle')
-            .attr('fill', '#cbd5e1')
+            .attr('fill', '#374151')
             .style('font-size', '14px')
             .style('font-weight', '500')
-            .text(yMetric.replaceAll('_', ' '))
+            .text(formatMetric(yMetric))
 
         const bubbleGroup = svg.append('g')
 
         bubbleGroup
-            .selectAll<SVGCircleElement, ScatterPoint>('circle')
-            .data(scatterRecords, (d: ScatterPoint) => d.country)
+            .selectAll('circle')
+            .data(scatterRecords, (d: any) => d.country)
             .join('circle')
-            .attr('cx', (d: ScatterPoint) => xScale(d.x))
-            .attr('cy', (d: ScatterPoint) => yScale(d.y))
+            .attr('cx', (d) => xScale(d.x))
+            .attr('cy', (d) => yScale(d.y))
             .attr('r', 0)
-            .attr('fill', '#60a5fa')
-            .attr('fill-opacity', 0.65)
-            .attr('stroke', '#3b82f6')
+            .attr('fill', '#2563eb')
+            .attr('fill-opacity', 0.5)
+            .attr('stroke', '#1d4ed8')
             .attr('stroke-width', 1.5)
-            .on('mousemove', (event: MouseEvent, d: ScatterPoint) => {
+            .on('mousemove', (event: MouseEvent, d) => {
                 setScatterTooltip({
                     x: event.clientX,
                     y: event.clientY,
@@ -263,7 +262,7 @@ function BubbleScatterPlot() {
             })
             .transition()
             .duration(600)
-            .attr('r', (d: ScatterPoint) => rScale(d.size))
+            .attr('r', (d) => rScale(d.size))
 
         // label only biggest few
         const sortedBySize = [...scatterRecords].sort((a, b) => b.size - a.size).slice(0, 5)
@@ -273,13 +272,13 @@ function BubbleScatterPlot() {
             .data(sortedBySize)
             .join('text')
             .attr('class', 'country-label')
-            .attr('x', (d: ScatterPoint) => xScale(d.x))
-            .attr('y', (d: ScatterPoint) => yScale(d.y) - 12)
+            .attr('x', (d) => xScale(d.x))
+            .attr('y', (d) => yScale(d.y) - 12)
             .attr('text-anchor', 'middle')
-            .attr('fill', '#e2e8f0')
+            .attr('fill', '#1f2937')
             .style('font-size', '11px')
             .style('font-weight', '500')
-            .text((d: ScatterPoint) => d.country)
+            .text((d) => d.country)
     }, [scatterRecords, xMetric, yMetric, scatterYear])
 
     useEffect(() => {
@@ -305,168 +304,81 @@ function BubbleScatterPlot() {
 
     return (
         <>
-            <div
-                style={{
-                    marginTop: 0,
-                    maxWidth: 980,
-                    background: '#111827',
-                    border: '1px solid #1f2937',
-                    borderRadius: 20,
-                    padding: 24,
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-                }}
-            >
-                <h2
-                    style={{
-                        marginTop: 0,
-                        marginBottom: 20,
-                        fontSize: 32,
-                        color: '#f8fafc',
-                        textAlign: 'center',
-                        fontWeight: 700,
-                    }}
-                >
-                    Exploration of Climate Change Factors Over Time
-                </h2>
+            <div className="scatter-layout">
+                <div className="scatter-sidebar">
+                    <h3>Controls</h3>
 
-                <div
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-                        gap: 16,
-                        marginBottom: 20,
-                        alignItems: 'end',
-                    }}
-                >
-                    <label style={{ color: '#cbd5e1', fontSize: 14 }}>
-                        <div style={{ marginBottom: 6 }}>X Axis</div>
-                        <select
-                            value={xMetric}
-                            onChange={(e) => setXMetric(e.target.value)}
-                            disabled={!meta}
-                            style={{
-                                width: '100%',
-                                padding: '10px 12px',
-                                borderRadius: 10,
-                                border: '1px solid #334155',
-                                background: '#0f172a',
-                                color: '#f8fafc',
-                            }}
-                        >
+                    <label>
+                        X Axis
+                        <select value={xMetric} onChange={(e) => setXMetric(e.target.value)} disabled={!meta}>
                             {(meta?.metrics ?? []).map((m) => (
-                                <option key={m} value={m}>
-                                    {m}
-                                </option>
+                                <option key={m} value={m}>{formatMetric(m)}</option>
                             ))}
                         </select>
                     </label>
 
-                    <label style={{ color: '#cbd5e1', fontSize: 14 }}>
-                        <div style={{ marginBottom: 6 }}>Y Axis</div>
-                        <select
-                            value={yMetric}
-                            onChange={(e) => setYMetric(e.target.value)}
-                            disabled={!meta}
-                            style={{
-                                width: '100%',
-                                padding: '10px 12px',
-                                borderRadius: 10,
-                                border: '1px solid #334155',
-                                background: '#0f172a',
-                                color: '#f8fafc',
-                            }}
-                        >
+                    <label>
+                        Y Axis
+                        <select value={yMetric} onChange={(e) => setYMetric(e.target.value)} disabled={!meta}>
                             {(meta?.metrics ?? []).map((m) => (
-                                <option key={m} value={m}>
-                                    {m}
-                                </option>
+                                <option key={m} value={m}>{formatMetric(m)}</option>
                             ))}
                         </select>
                     </label>
 
-                    <label style={{ color: '#cbd5e1', fontSize: 14 }}>
-                        <div style={{ marginBottom: 6 }}>Bubble Size</div>
-                        <select
-                            value={sizeMetric}
-                            onChange={(e) => setSizeMetric(e.target.value)}
-                            disabled={!meta}
-                            style={{
-                                width: '100%',
-                                padding: '10px 12px',
-                                borderRadius: 10,
-                                border: '1px solid #334155',
-                                background: '#0f172a',
-                                color: '#f8fafc',
-                            }}
-                        >
+                    <label>
+                        Bubble Size
+                        <select value={sizeMetric} onChange={(e) => setSizeMetric(e.target.value)} disabled={!meta}>
                             {(meta?.metrics ?? []).map((m) => (
-                                <option key={m} value={m}>
-                                    {m}
-                                </option>
+                                <option key={m} value={m}>{formatMetric(m)}</option>
                             ))}
                         </select>
                     </label>
 
                     <button
                         type="button"
+                        className="play-btn"
                         onClick={() => setIsPlaying((prev) => !prev)}
-                        style={{
-                            padding: '10px 16px',
-                            borderRadius: 10,
-                            border: '1px solid #2563eb',
-                            background: isPlaying ? '#1d4ed8' : '#2563eb',
-                            color: '#ffffff',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            height: 42,
-                        }}
                     >
                         {isPlaying ? 'Pause' : 'Play'}
                     </button>
+
+                    <div>
+                        <div className="year-label">
+                            Year: <strong>{scatterYear ?? ''}</strong>
+                        </div>
+                        <input
+                            type="range"
+                            min={0}
+                            max={Math.max((meta?.years?.length ?? 1) - 1, 0)}
+                            step={1}
+                            value={Math.max((meta?.years ?? []).indexOf(scatterYear ?? -1), 0)}
+                            onChange={(e) => {
+                                const index = Number(e.target.value)
+                                const nextYear = meta?.years?.[index]
+                                if (typeof nextYear === 'number') setScatterYear(nextYear)
+                            }}
+                            style={{ width: '100%', marginTop: 6 }}
+                            disabled={!meta || (meta?.years?.length ?? 0) === 0}
+                        />
+                    </div>
                 </div>
 
-                <div style={{ marginBottom: 18 }}>
-                    <div
+                <div className="scatter-plot-area">
+                    <h2>Exploration of Climate Change Factors Over Time</h2>
+                    {scatterError ? <p style={{ color: '#b00020', margin: '0 0 8px' }}>{scatterError}</p> : null}
+                    <svg
+                        ref={scatterSvgRef}
                         style={{
-                            color: '#cbd5e1',
-                            marginBottom: 10,
-                            textAlign: 'center',
-                            fontSize: 16,
+                            width: '100%',
+                            maxWidth: 980,
+                            display: 'block',
+                            background: '#f8faff',
+                            borderRadius: 8,
+                            border: '1px solid #e5e7eb',
                         }}
-                    >
-                        Year: <strong style={{ color: '#f8fafc' }}>{scatterYear ?? ''}</strong>
-                    </div>
-                    <input
-                        type="range"
-                        min={0}
-                        max={Math.max((meta?.years?.length ?? 1) - 1, 0)}
-                        step={1}
-                        value={Math.max((meta?.years ?? []).indexOf(scatterYear ?? -1), 0)}
-                        onChange={(e) => {
-                            const index = Number(e.target.value)
-                            const nextYear = meta?.years?.[index]
-                            if (typeof nextYear === 'number') {
-                                setScatterYear(nextYear)
-                            }
-                        }}
-                        style={{ width: '100%' }}
-                        disabled={!meta || (meta?.years?.length ?? 0) === 0}
                     />
                 </div>
-
-                {scatterError ? <p style={{ color: '#fca5a5' }}>{scatterError}</p> : null}
-
-                <svg
-                    ref={scatterSvgRef}
-                    style={{
-                        width: '100%',
-                        maxWidth: 980,
-                        display: 'block',
-                        background: '#0f172a',
-                        borderRadius: 16,
-                        border: '1px solid #1e293b',
-                    }}
-                />
             </div>
 
             {scatterTooltip ? (
@@ -476,21 +388,21 @@ function BubbleScatterPlot() {
                         left: scatterTooltip.x + 14,
                         top: scatterTooltip.y + 14,
                         pointerEvents: 'none',
-                        background: 'rgba(15, 23, 42, 0.96)',
-                        color: '#f8fafc',
+                        background: '#ffffff',
+                        color: '#1f2937',
                         padding: '10px 12px',
-                        borderRadius: 12,
+                        borderRadius: 8,
                         fontSize: 12,
                         lineHeight: 1.6,
-                        boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
-                        border: '1px solid #334155',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                        border: '1px solid #e5e7eb',
                         zIndex: 11,
                     }}
                 >
                     <div style={{ fontWeight: 700, marginBottom: 4 }}>{scatterTooltip.country}</div>
-                    <div>{xMetric}: {scatterTooltip.xValue.toFixed(2)}</div>
-                    <div>{yMetric}: {scatterTooltip.yValue.toFixed(2)}</div>
-                    <div>{sizeMetric}: {scatterTooltip.sizeValue.toFixed(2)}</div>
+                    <div>{formatMetric(xMetric)}: {scatterTooltip.xValue.toFixed(2)}</div>
+                    <div>{formatMetric(yMetric)}: {scatterTooltip.yValue.toFixed(2)}</div>
+                    <div>{formatMetric(sizeMetric)}: {scatterTooltip.sizeValue.toFixed(2)}</div>
                 </div>
             ) : null}
         </>
