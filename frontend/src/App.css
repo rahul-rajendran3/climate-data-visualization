@@ -54,7 +54,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.2s, color 0.2s;
+  transition:
+    border-color 0.2s,
+    color 0.2s;
 }
 
 .app-header__help:hover {
@@ -105,7 +107,10 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, color 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    color 0.2s;
 }
 
 .view-nav__btn:hover {
@@ -137,6 +142,7 @@
 .choropleth-map-area {
   flex: 1 1 0;
   min-width: 0;
+  min-height: 0;
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -146,13 +152,17 @@
   position: relative;
   width: 100%;
   flex: 1;
-  overflow: auto;
+  min-height: 0;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
 }
 
 .choropleth-map-svg {
   display: block;
-  min-width: 980px;
-  max-width: none;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .choropleth-map-area h2 {
@@ -308,6 +318,9 @@
   border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: 10px;
   padding: 10px;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
 }
 
 .map-sidebar .news-header {
@@ -370,7 +383,9 @@
 .map-sidebar .news-list {
   margin: 8px 0 0 16px;
   padding: 0;
-  max-height: 360px;
+  max-height: none;
+  min-height: 150px;
+  flex: 1;
   overflow: auto;
   font-size: 12px;
   line-height: 1.35;
@@ -487,4 +502,19 @@
 .placeholder-card__text {
   color: #9ca3af;
   font-size: 15px;
+}
+
+@media (max-width: 1024px) {
+  .choropleth-layout {
+    flex-direction: column;
+    min-height: auto;
+  }
+
+  .map-sidebar {
+    width: 100%;
+  }
+
+  .choropleth-map-frame {
+    aspect-ratio: 16 / 10;
+  }
 }
