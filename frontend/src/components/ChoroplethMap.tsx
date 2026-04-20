@@ -23,6 +23,19 @@ type TooltipState = {
     value: number | null
 }
 
+type NewsArticle = {
+    title: string
+    url: string
+    source?: string | null
+    date?: string | null
+}
+
+type NewsResponse = {
+    country: string
+    query: string
+    articles: NewsArticle[]
+    warning?: string
+}
 
 type WorldFeature = GeoJSON.Feature<GeoJSON.Geometry, { name?: string }>
 type WorldCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, { name?: string }>
@@ -49,6 +62,12 @@ function isClimateMapResponse(value: unknown): value is ClimateMapResponse {
     return Array.isArray(candidate.records)
 }
 
+function isNewsResponse(value: unknown): value is NewsResponse {
+    if (typeof value !== 'object' || value === null) return false
+    const candidate = value as Partial<NewsResponse>
+    return typeof candidate.country === 'string' && Array.isArray(candidate.articles)
+}
+
 
 function ChoroplethMap() {
     const svgRef = useRef<SVGSVGElement | null>(null)
@@ -59,6 +78,26 @@ function ChoroplethMap() {
     const [world, setWorld] = useState<WorldCollection | null>(null)
     const [error, setError] = useState<string>('')
     const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+
+    const [hoverCountry, setHoverCountry] = useState<string | null>(null)
+    const [pendingHoverCountry, setPendingHoverCountry] = useState<string | null>(null)
+    const [pinnedCountry, setPinnedCountry] = useState<string | null>(null)
+    const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([])
+    const [newsLoading, setNewsLoading] = useState(false)
+    const [newsError, setNewsError] = useState<string>('')
+    const [newsWarning, setNewsWarning] = useState<string>('')
+    const newsCacheRef = useRef<Map<string, NewsArticle[]>>(new Map())
+    const lastHoverCountryRef = useRef<string>('')
+    const newsPanelHoverRef = useRef<boolean>(false)
+    const hoveredPathRef = useRef<SVGPathElement | null>(null)
+    const pinnedPathRef = useRef<SVGPathElement | null>(null)
+
+    const pinnedCountryRef = useRef<string | null>(null)
+    useEffect(() => {
+        pinnedCountryRef.current = pinnedCountry
+    }, [pinnedCountry])
+
+    const selectedCountry = pinnedCountry ?? hoverCountry
 
     const valueStats = useMemo(() => {
         const values = mapRecords.map((r) => r.value).filter((v) => Number.isFinite(v))
@@ -149,6 +188,95 @@ function ChoroplethMap() {
         }
     }, [metric, year])
 
+    useEffect(() => {
+        if (!selectedCountry) {
+            setNewsLoading(false)
+            setNewsError('')
+            setNewsWarning('')
+            setNewsArticles([])
+            return
+        }
+
+        const country = selectedCountry
+
+        const cached = newsCacheRef.current.get(country)
+        if (cached) {
+            setNewsArticles(cached)
+            setNewsError('')
+            setNewsWarning('')
+            setNewsLoading(false)
+            return
+        }
+
+        const controller = new AbortController()
+        setNewsLoading(true)
+        setNewsError('')
+
+        const debounceId = window.setTimeout(() => {
+            async function loadNews() {
+                try {
+                    const url = `http://127.0.0.1:5001/api/climate-news?country=${encodeURIComponent(country)}&limit=5`
+                    const res = await fetch(url, { signal: controller.signal })
+
+                    if (!res.ok) {
+                        let message = `Failed to load climate news (HTTP ${res.status})`
+                        try {
+                            const maybeJson: any = await res.json()
+                            if (maybeJson && typeof maybeJson.error === 'string') {
+                                message = maybeJson.error
+                            }
+                        } catch {
+                            // ignore JSON parse failures
+                        }
+                        throw new Error(message)
+                    }
+
+                    const raw: unknown = await res.json()
+                    if (!isNewsResponse(raw)) {
+                        throw new Error('Unexpected response shape from /api/climate-news')
+                    }
+
+                    newsCacheRef.current.set(country, raw.articles ?? [])
+                    setNewsArticles(raw.articles ?? [])
+                    setNewsWarning(typeof raw.warning === 'string' ? raw.warning : '')
+                    setNewsLoading(false)
+                } catch (e) {
+                    if (controller.signal.aborted) return
+                    setNewsLoading(false)
+                    setNewsArticles([])
+                    setNewsError(e instanceof Error ? e.message : 'Failed to load climate news')
+                    setNewsWarning('')
+                }
+            }
+
+            loadNews()
+        }, 900)
+
+        return () => {
+            window.clearTimeout(debounceId)
+            controller.abort()
+        }
+    }, [selectedCountry])
+
+    useEffect(() => {
+        if (!pendingHoverCountry) return
+
+        const country = pendingHoverCountry
+        const hoverIntentDelayMs = 220
+
+        const id = window.setTimeout(() => {
+            if (newsPanelHoverRef.current) return
+            if (pinnedCountryRef.current) return
+            if (country && country !== 'Unknown') {
+                setHoverCountry(country)
+            }
+        }, hoverIntentDelayMs)
+
+        return () => {
+            window.clearTimeout(id)
+        }
+    }, [pendingHoverCountry])
+
 
 
     useEffect(() => {
@@ -159,16 +287,21 @@ function ChoroplethMap() {
         const svg = d3.select(svgRef.current)
 
         svg.selectAll('*').remove()
-        svg.attr('width', width).attr('height', height)
+        svg.attr('viewBox', `0 0 ${width} ${height}`).attr('preserveAspectRatio', 'xMidYMid meet')
 
         const projection = d3.geoNaturalEarth1().fitSize([width, height], world)
         const path = d3.geoPath(projection)
         const dataMap = toDataMap(mapRecords)
         const color = d3.scaleSequential(d3.interpolateYlOrRd).domain([valueStats.min, valueStats.max || 1])
 
+        const defaultStroke = '#ffffff'
+        const defaultStrokeWidth = 0.6
+        const hoverStroke = 'var(--accent-border)'
+        const pinnedStroke = 'var(--accent)'
+
         const countryPaths = svg
             .append('g')
-            .selectAll('path')
+            .selectAll<SVGPathElement, WorldFeature>('path')
             .data(world.features as WorldFeature[])
             .join('path')
             .attr('d', (d) => path(d) ?? '')
@@ -177,8 +310,8 @@ function ChoroplethMap() {
                 const val = dataMap.get(name)
                 return typeof val === 'number' ? color(val) : '#d9d9d9'
             })
-            .attr('stroke', '#ffffff')
-            .attr('stroke-width', 0.6)
+            .attr('stroke', defaultStroke)
+            .attr('stroke-width', defaultStrokeWidth)
 
         countryPaths
             .append('title')
@@ -189,9 +322,63 @@ function ChoroplethMap() {
             })
 
         countryPaths
+            .on('mouseenter', (_event: MouseEvent, d) => {
+                const countryName = d.properties?.name ?? 'Unknown'
+                if (newsPanelHoverRef.current) return
+                if (pinnedCountryRef.current) return
+
+                const currentPath = (_event.currentTarget as SVGPathElement | null) ?? null
+                if (currentPath) {
+                    if (hoveredPathRef.current && hoveredPathRef.current !== pinnedPathRef.current) {
+                        d3.select(hoveredPathRef.current)
+                            .attr('stroke', defaultStroke)
+                            .attr('stroke-width', defaultStrokeWidth)
+                    }
+
+                    hoveredPathRef.current = currentPath
+                    if (hoveredPathRef.current !== pinnedPathRef.current) {
+                        d3.select(hoveredPathRef.current).attr('stroke', hoverStroke).attr('stroke-width', 1.4)
+                    }
+                }
+
+                if (countryName && countryName !== 'Unknown' && lastHoverCountryRef.current !== countryName) {
+                    lastHoverCountryRef.current = countryName
+                    setPendingHoverCountry(countryName)
+                }
+            })
+            .on('click', (_event: MouseEvent, d) => {
+                const countryName = d.properties?.name ?? 'Unknown'
+                if (!countryName || countryName === 'Unknown') return
+
+                const currentPath = (_event.currentTarget as SVGPathElement | null) ?? null
+                const isUnpin = pinnedCountryRef.current === countryName
+
+                if (pinnedPathRef.current) {
+                    d3.select(pinnedPathRef.current)
+                        .attr('stroke', defaultStroke)
+                        .attr('stroke-width', defaultStrokeWidth)
+                }
+
+                if (isUnpin) {
+                    pinnedPathRef.current = null
+                    pinnedCountryRef.current = null
+                    setPinnedCountry(null)
+                } else {
+                    pinnedPathRef.current = currentPath
+                    pinnedCountryRef.current = countryName
+                    setPinnedCountry(countryName)
+                    if (pinnedPathRef.current) {
+                        d3.select(pinnedPathRef.current).attr('stroke', pinnedStroke).attr('stroke-width', 2.2)
+                    }
+                }
+
+                setHoverCountry(countryName)
+                setPendingHoverCountry(null)
+            })
             .on('mousemove', (event: MouseEvent, d) => {
                 const countryName = d.properties?.name ?? 'Unknown'
                 const val = dataMap.get(countryName)
+
                 setTooltip({
                     x: event.clientX,
                     y: event.clientY,
@@ -201,87 +388,138 @@ function ChoroplethMap() {
             })
             .on('mouseleave', () => {
                 setTooltip(null)
+                if (hoveredPathRef.current && hoveredPathRef.current !== pinnedPathRef.current) {
+                    d3.select(hoveredPathRef.current)
+                        .attr('stroke', defaultStroke)
+                        .attr('stroke-width', defaultStrokeWidth)
+                    hoveredPathRef.current = null
+                }
             })
     }, [world, mapRecords, valueStats.max, valueStats.min])
 
     return (
-        <div style={{ padding: 16 }}>
-            <h2 style={{ marginBottom: 12 }}>Global Climate Choropleth</h2>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-                <label>
-                    Metric{' '}
-                    <select value={metric} onChange={(e) => setMetric(e.target.value)} disabled={!meta}>
-                        {(meta?.metrics ?? []).map((m) => (
-                            <option key={m} value={m}>
-                                {m}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+        <div className="dashboard">
+            <div className="dashboardHeader">
+                <div className="dashboardLegend legend">
+                    <div className="legendTitle">
+                        Color legend for {metric || 'selected metric'} ({year ?? 'latest'})
+                    </div>
+                    <div className="legendBar" />
+                    <div className="legendTicks">
+                        <span>{valueStats.min.toFixed(2)}</span>
+                        <span>{valueStats.max.toFixed(2)}</span>
+                    </div>
+                    <div className="hint">Gray countries indicate missing data. Hover to preview. Click a country to pin.</div>
+                    {error ? <div className="error">{error}</div> : null}
+                </div>
 
-                <label>
-                    Year{' '}
-                    <select
-                        value={year ?? ''}
-                        onChange={(e) => setYear(Number(e.target.value))}
-                        disabled={!meta || (meta.years?.length ?? 0) === 0}
-                    >
-                        {(meta?.years ?? []).map((y) => (
-                            <option key={y} value={y}>
-                                {y}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                <div className="controls">
+                    <label className="control">
+                        <span>Metric</span>
+                        <select value={metric} onChange={(e) => setMetric(e.target.value)} disabled={!meta}>
+                            {(meta?.metrics ?? []).map((m) => (
+                                <option key={m} value={m}>
+                                    {m}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <label className="control">
+                        <span>Year</span>
+                        <select
+                            value={year ?? ''}
+                            onChange={(e) => setYear(Number(e.target.value))}
+                            disabled={!meta || (meta.years?.length ?? 0) === 0}
+                        >
+                            {(meta?.years ?? []).map((y) => (
+                                <option key={y} value={y}>
+                                    {y}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                </div>
             </div>
 
-            <div style={{ marginBottom: 10, maxWidth: 420 }}>
-                <div style={{ marginBottom: 6, fontSize: 13 }}>
-                    Color legend for {metric || 'selected metric'} ({year ?? 'latest'})
+            <div className="dashboardBody">
+                <div className="mapPane">
+                    <div className="mapFrame">
+                        <svg ref={svgRef} className="mapSvg" />
+                    </div>
                 </div>
+
                 <div
-                    style={{
-                        height: 14,
-                        borderRadius: 999,
-                        border: '1px solid #d0d0d0',
-                        background: 'linear-gradient(90deg, #ffffcc 0%, #fd8d3c 55%, #bd0026 100%)',
+                    className="newsPane"
+                    onMouseEnter={() => {
+                        newsPanelHoverRef.current = true
                     }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 12 }}>
-                    <span>{valueStats.min.toFixed(2)}</span>
-                    <span>{valueStats.max.toFixed(2)}</span>
+                    onMouseLeave={() => {
+                        newsPanelHoverRef.current = false
+                    }}
+                >
+                    <div className="panel">
+                        <div className="panelHeader">
+                            <div>
+                                <div className="panelTitle">
+                                    Latest climate news{selectedCountry ? ` — ${selectedCountry}` : ''}
+                                </div>
+                                <div className="panelMeta">
+                                    {pinnedCountry
+                                        ? 'Pinned (click the same country again to unpin)'
+                                        : 'Hover a country to preview; click to pin'}
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                className="pinButton"
+                                disabled={!selectedCountry}
+                                onClick={() => {
+                                    if (!selectedCountry) return
+                                    setPinnedCountry((prev) => (prev === selectedCountry ? null : selectedCountry))
+                                }}
+                            >
+                                {pinnedCountry ? 'Unpin' : 'Pin'}
+                            </button>
+                        </div>
+
+                        <div className="panelBody">
+                            {!selectedCountry ? <div className="hint">Hover any country on the map to load headlines here.</div> : null}
+                            {newsLoading ? <div className="hint">Loading…</div> : null}
+                            {newsError ? <div className="error">{newsError}</div> : null}
+                            {newsWarning ? <div className="warning">{newsWarning}</div> : null}
+
+                            {!newsLoading && !newsError && selectedCountry ? (
+                                newsArticles.length ? (
+                                    <ol className="newsList">
+                                        {newsArticles.map((a) => (
+                                            <li key={a.url} className="newsItem">
+                                                <a className="newsLink" href={a.url} target="_blank" rel="noreferrer">
+                                                    {a.title}
+                                                </a>
+                                                {a.source ? <span> — {a.source}</span> : null}
+                                            </li>
+                                        ))}
+                                    </ol>
+                                ) : (
+                                    <div className="hint">No recent results found.</div>
+                                )
+                            ) : null}
+                        </div>
+                    </div>
                 </div>
-                <div style={{ marginTop: 4, fontSize: 12, color: '#555' }}>Gray countries indicate missing data.</div>
-            </div>
-
-            {error ? <p style={{ color: '#b00020' }}>{error}</p> : null}
-
-            <div style={{ position: 'relative', width: '100%', maxWidth: 980 }}>
-                <svg ref={svgRef} style={{ width: '100%', maxWidth: 980, border: '1px solid #ddd' }} />
             </div>
 
             {tooltip ? (
-                <div
-                    style={{
-                        position: 'fixed',
-                        left: tooltip.x + 14,
-                        top: tooltip.y + 14,
-                        pointerEvents: 'none',
-                        background: '#111827',
-                        color: '#fff',
-                        padding: '8px 10px',
-                        borderRadius: 8,
-                        fontSize: 12,
-                        lineHeight: 1.4,
-                        boxShadow: '0 8px 20px rgba(0,0,0,0.22)',
-                        zIndex: 10,
-                    }}
-                >
+                <div className="tooltip" style={{ left: tooltip.x + 14, top: tooltip.y + 14 }}>
                     <div>{tooltip.country}</div>
                     <div>{tooltip.value === null ? 'No data' : `${metric}: ${tooltip.value.toFixed(2)}`}</div>
+                    <div style={{ marginTop: 4, opacity: 0.9 }}>
+                        News: {newsLoading ? 'loading…' : newsError ? 'unavailable' : selectedCountry ? 'see panel' : '—'}
+                    </div>
                 </div>
             ) : null}
-
         </div>
     )
 }

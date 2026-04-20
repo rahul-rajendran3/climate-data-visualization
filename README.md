@@ -49,7 +49,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-4. Create a `.env` file in `backend/`. You can copy `.env.example` and add your Kaggle credentials.
+4. Create a `.env` file in `backend/` and add your Kaggle credentials.
 
 Example (in `backend/.env`):
 
@@ -119,6 +119,40 @@ Response shape:
 		{"country": "Canada", "value": 411.1}
 	]
 }
+
+```
+
+Climate news
+
+On hover, the choropleth can optionally fetch recent climate-change news coverage for the hovered country/region.
+
+```
+GET /api/climate-news?country=India&limit=5
+```
+
+Response shape:
+
+```json
+{
+	"country": "India",
+	"query": "climate change India",
+	"articles": [
+		{
+			"title": "...",
+			"url": "https://...",
+			"source": "example.com",
+			"date": "2026-04-19 12:34:56.000"
+		}
+	]
+}
+```
+
+ReliefWeb note: This project uses ReliefWeb reports for the news hover panel. ReliefWeb requires an approved `appname`.
+
+Set this in `backend/.env`:
+
+```text
+RELIEFWEB_APPNAME=your-approved-appname
 ```
 
 Frontend

@@ -107,15 +107,17 @@ function BubbleScatterPlot() {
                     filtered,
                     (rows: any[]) => ({
                         country: rows[0].country,
-                        x: d3.mean(rows, (r) => Number(r[xMetric])) ?? 0,
-                        y: d3.mean(rows, (r) => Number(r[yMetric])) ?? 0,
-                        size: d3.mean(rows, (r) => Number(r[sizeMetric])) ?? 0,
+                        x: d3.mean(rows, (r: any) => Number(r[xMetric])) ?? 0,
+                        y: d3.mean(rows, (r: any) => Number(r[yMetric])) ?? 0,
+                        size: d3.mean(rows, (r: any) => Number(r[sizeMetric])) ?? 0,
                     }),
                     (d: any) => d.country
-                ).map(([, value]) => value)
+                ) as Array<[string, ScatterPoint]>
+
+                const points = grouped.map(([, value]: [string, ScatterPoint]) => value)
 
                 if (!cancelled) {
-                    setScatterRecords(grouped)
+                    setScatterRecords(points)
                     setScatterError('')
                 }
             } catch (e) {
@@ -143,9 +145,9 @@ function BubbleScatterPlot() {
 
         if (!scatterRecords.length) return
 
-        const xExtent = d3.extent(scatterRecords, (d) => d.x) as [number, number]
-        const yExtent = d3.extent(scatterRecords, (d) => d.y) as [number, number]
-        const sizeExtent = d3.extent(scatterRecords, (d) => d.size) as [number, number]
+    const xExtent = d3.extent(scatterRecords, (d: ScatterPoint) => d.x) as [number, number]
+    const yExtent = d3.extent(scatterRecords, (d: ScatterPoint) => d.y) as [number, number]
+    const sizeExtent = d3.extent(scatterRecords, (d: ScatterPoint) => d.size) as [number, number]
 
         const xPad = (xExtent[1] - xExtent[0]) * 0.08 || 1
         const yPad = (yExtent[1] - yExtent[0]) * 0.08 || 1
@@ -236,17 +238,17 @@ function BubbleScatterPlot() {
         const bubbleGroup = svg.append('g')
 
         bubbleGroup
-            .selectAll('circle')
-            .data(scatterRecords, (d: any) => d.country)
+            .selectAll<SVGCircleElement, ScatterPoint>('circle')
+            .data(scatterRecords, (d: ScatterPoint) => d.country)
             .join('circle')
-            .attr('cx', (d) => xScale(d.x))
-            .attr('cy', (d) => yScale(d.y))
+            .attr('cx', (d: ScatterPoint) => xScale(d.x))
+            .attr('cy', (d: ScatterPoint) => yScale(d.y))
             .attr('r', 0)
             .attr('fill', '#60a5fa')
             .attr('fill-opacity', 0.65)
             .attr('stroke', '#3b82f6')
             .attr('stroke-width', 1.5)
-            .on('mousemove', (event: MouseEvent, d) => {
+            .on('mousemove', (event: MouseEvent, d: ScatterPoint) => {
                 setScatterTooltip({
                     x: event.clientX,
                     y: event.clientY,
@@ -261,7 +263,7 @@ function BubbleScatterPlot() {
             })
             .transition()
             .duration(600)
-            .attr('r', (d) => rScale(d.size))
+            .attr('r', (d: ScatterPoint) => rScale(d.size))
 
         // label only biggest few
         const sortedBySize = [...scatterRecords].sort((a, b) => b.size - a.size).slice(0, 5)
@@ -271,13 +273,13 @@ function BubbleScatterPlot() {
             .data(sortedBySize)
             .join('text')
             .attr('class', 'country-label')
-            .attr('x', (d) => xScale(d.x))
-            .attr('y', (d) => yScale(d.y) - 12)
+            .attr('x', (d: ScatterPoint) => xScale(d.x))
+            .attr('y', (d: ScatterPoint) => yScale(d.y) - 12)
             .attr('text-anchor', 'middle')
             .attr('fill', '#e2e8f0')
             .style('font-size', '11px')
             .style('font-weight', '500')
-            .text((d) => d.country)
+            .text((d: ScatterPoint) => d.country)
     }, [scatterRecords, xMetric, yMetric, scatterYear])
 
     useEffect(() => {
@@ -305,7 +307,7 @@ function BubbleScatterPlot() {
         <>
             <div
                 style={{
-                    marginTop: 48,
+                    marginTop: 0,
                     maxWidth: 980,
                     background: '#111827',
                     border: '1px solid #1f2937',
