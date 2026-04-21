@@ -10,6 +10,7 @@ type ClimatePoint = {
 type ClimateMeta = {
   years: number[];
   metrics: string[];
+  metricYears?: Record<string, number[]>;
   defaultMetric: string | null;
 };
 
@@ -72,6 +73,25 @@ function isNewsResponse(value: unknown): value is NewsResponse {
   return (
     typeof candidate.country === "string" && Array.isArray(candidate.articles)
   );
+}
+
+function formatMetricValue(value: number, metric: string): string {
+  const metricLower = metric.toLowerCase();
+  const looksPercentLike =
+    metricLower.includes("percent") ||
+    metricLower.includes("growth") ||
+    metricLower.includes("ratio") ||
+    metricLower.includes("share");
+
+  if (looksPercentLike) {
+    return d3.format(".2f")(value);
+  }
+
+  const abs = Math.abs(value);
+  if (abs >= 1000) {
+    return d3.format(",.0f")(value);
+  }
+  return d3.format(".2f")(value);
 }
 
 function ChoroplethMap() {
@@ -139,14 +159,76 @@ function ChoroplethMap() {
     };
   }, [pendingHoverCountry, pinnedCountry, hoverCountry]);
 
-  const valueStats = useMemo(() => {
+  const colorScaleInfo = useMemo(() => {
     const values = mapRecords
       .map((r) => r.value)
       .filter((v) => Number.isFinite(v));
-    const min = values.length ? (d3.min(values) ?? 0) : 0;
-    const max = values.length ? (d3.max(values) ?? 1) : 1;
-    return { min, max };
+
+    if (!values.length) {
+      const fallback = d3
+        .scaleSequential(d3.interpolateYlOrRd)
+        .domain([0, 1])
+        .clamp(true);
+      return {
+        colorFor: (v: number) => fallback(v),
+        legendMin: 0,
+        legendMax: 1,
+        legendMode: "Linear scale",
+      };
+    }
+
+    const sorted = [...values].sort((a, b) => a - b);
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    const q05 = d3.quantileSorted(sorted, 0.05) ?? min;
+    const q50 = d3.quantileSorted(sorted, 0.5) ?? q05;
+    const q95 = d3.quantileSorted(sorted, 0.95) ?? max;
+
+    const positive = sorted.filter((v) => v > 0);
+    const mostlyPositive = positive.length >= sorted.length * 0.95;
+    const skewRatio = q50 > 0 ? q95 / q50 : Number.POSITIVE_INFINITY;
+    const useLog = mostlyPositive && skewRatio >= 8 && max > 0;
+
+    if (useLog) {
+      const smallestPositive = positive[0] ?? 1e-6;
+      const domainMin = Math.max(q05, smallestPositive);
+      const domainMax = Math.max(q95, domainMin * 1.01);
+      const scale = d3
+        .scaleSequentialLog(d3.interpolateYlOrRd)
+        .domain([domainMin, domainMax])
+        .clamp(true);
+
+      return {
+        colorFor: (v: number) => scale(v > 0 ? v : domainMin),
+        legendMin: domainMin,
+        legendMax: domainMax,
+        legendMode: "Log scale (5th-95th percentile)",
+      };
+    }
+
+    const domainMin = q05;
+    const domainMax = Math.max(q95, domainMin + 1e-9);
+    const scale = d3
+      .scaleSequential(d3.interpolateYlOrRd)
+      .domain([domainMin, domainMax])
+      .clamp(true);
+
+    return {
+      colorFor: (v: number) => scale(v),
+      legendMin: domainMin,
+      legendMax: domainMax,
+      legendMode: "Linear scale (5th-95th percentile)",
+    };
   }, [mapRecords]);
+
+  const availableYears = useMemo(() => {
+    if (!meta) return [] as number[];
+    const perMetricYears = metric ? meta.metricYears?.[metric] : undefined;
+    if (Array.isArray(perMetricYears) && perMetricYears.length > 0) {
+      return perMetricYears;
+    }
+    return meta.years ?? [];
+  }, [meta, metric]);
 
   useEffect(() => {
     let cancelled = false;
@@ -172,12 +254,24 @@ function ChoroplethMap() {
         const metaJson = metaRaw;
         if (!cancelled) {
           setMeta(metaJson);
-          if (metaJson.defaultMetric) {
-            setMetric(metaJson.defaultMetric);
-          }
-          if (metaJson.years?.length) {
-            setYear(metaJson.years[metaJson.years.length - 1]);
-          }
+          const alphabeticallyFirstMetric =
+            [...(metaJson.metrics ?? [])].sort((a, b) =>
+              a.localeCompare(b),
+            )[0] ?? "";
+          const initialMetric =
+            alphabeticallyFirstMetric ||
+            metaJson.defaultMetric ||
+            metaJson.metrics?.[0] ||
+            "";
+          setMetric(initialMetric);
+
+          const initialYears =
+            (initialMetric && metaJson.metricYears?.[initialMetric]) ||
+            metaJson.years ||
+            [];
+          setYear(
+            initialYears.length ? initialYears[initialYears.length - 1] : null,
+          );
         }
 
         if (!cancelled) {
@@ -197,6 +291,19 @@ function ChoroplethMap() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!availableYears.length) {
+      if (year !== null) {
+        setYear(null);
+      }
+      return;
+    }
+
+    if (year === null || !availableYears.includes(year)) {
+      setYear(availableYears[availableYears.length - 1]);
+    }
+  }, [availableYears, year]);
 
   useEffect(() => {
     if (!metric || year === null) return;
@@ -251,9 +358,6 @@ function ChoroplethMap() {
     const projection = d3.geoNaturalEarth1().fitSize([width, height], world);
     const path = d3.geoPath(projection);
     const dataMap = toDataMap(mapRecords);
-    const color = d3
-      .scaleSequential(d3.interpolateYlOrRd)
-      .domain([valueStats.min, valueStats.max || 1]);
 
     const countryPaths = svg
       .append("g")
@@ -264,9 +368,11 @@ function ChoroplethMap() {
       .attr("fill", (d) => {
         const name = d.properties?.name ?? "";
         const val = dataMap.get(name);
-        return typeof val === "number" ? color(val) : "#d9d9d9";
+        return typeof val === "number"
+          ? colorScaleInfo.colorFor(val)
+          : "#d9d9d9";
       })
-      .attr("stroke", "#ffffff")
+      .attr("stroke", "rgba(15, 23, 42, 0.55)")
       .attr("stroke-width", 0.6);
 
     countryPaths
@@ -297,7 +403,7 @@ function ChoroplethMap() {
       .on("mouseleave", () => {
         setTooltip(null);
       });
-  }, [world, mapRecords, valueStats.max, valueStats.min]);
+  }, [world, mapRecords, colorScaleInfo]);
 
   useEffect(() => {
     if (!selectedCountry) {
@@ -404,9 +510,9 @@ function ChoroplethMap() {
           <select
             value={year ?? ""}
             onChange={(e) => setYear(Number(e.target.value))}
-            disabled={!meta || (meta.years?.length ?? 0) === 0}
+            disabled={!meta || availableYears.length === 0}
           >
-            {(meta?.years ?? []).map((y) => (
+            {availableYears.map((y) => (
               <option key={y} value={y}>
                 {y}
               </option>
@@ -420,10 +526,12 @@ function ChoroplethMap() {
           </div>
           <div className="legend-bar" />
           <div className="legend-range">
-            <span>{valueStats.min.toFixed(2)}</span>
-            <span>{valueStats.max.toFixed(2)}</span>
+            <span>{formatMetricValue(colorScaleInfo.legendMin, metric)}</span>
+            <span>{formatMetricValue(colorScaleInfo.legendMax, metric)}</span>
           </div>
-          <div className="legend-note">Gray = missing data</div>
+          <div className="legend-note">
+            {colorScaleInfo.legendMode}. Gray = missing data
+          </div>
         </div>
 
         <div className="news-panel">
@@ -521,7 +629,7 @@ function ChoroplethMap() {
           <div>
             {tooltip.value === null
               ? "No data"
-              : `${formatMetric(metric)}: ${tooltip.value.toFixed(2)}`}
+              : formatMetricValue(tooltip.value, metric)}
           </div>
         </div>
       ) : null}

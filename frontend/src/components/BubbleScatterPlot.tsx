@@ -47,10 +47,10 @@ function BubbleScatterPlot() {
 
         async function loadMeta() {
             try {
-                const metaRes = await fetch('http://127.0.0.1:5001/api/climate-meta')
-                if (!metaRes.ok) throw new Error('Failed to load /api/climate-meta')
+                const metaRes = await fetch('http://127.0.0.1:5001/api/kaggle-meta')
+                if (!metaRes.ok) throw new Error('Failed to load /api/kaggle-meta')
                 const metaRaw: unknown = await metaRes.json()
-                if (!isClimateMeta(metaRaw)) throw new Error('Unexpected response shape from /api/climate-meta')
+                if (!isClimateMeta(metaRaw)) throw new Error('Unexpected response shape from /api/kaggle-meta')
                 if (!cancelled) {
                     setMeta(metaRaw)
                     if (metaRaw.years?.length) {
@@ -82,14 +82,14 @@ function BubbleScatterPlot() {
 
         async function loadScatterValues() {
             try {
-                const res = await fetch('http://127.0.0.1:5001/api/climate-data?limit=500')
+                const res = await fetch('http://127.0.0.1:5001/api/kaggle-data?limit=500')
                 if (!res.ok) {
-                    throw new Error('Failed to load /api/climate-data')
+                    throw new Error('Failed to load /api/kaggle-data')
                 }
 
                 const rawData: unknown = await res.json()
                 if (!Array.isArray(rawData)) {
-                    throw new Error('Unexpected response shape from /api/climate-data')
+                    throw new Error('Unexpected response shape from /api/kaggle-data')
                 }
 
                 const filtered = rawData.filter((row: any) => {
