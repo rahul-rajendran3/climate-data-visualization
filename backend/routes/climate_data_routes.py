@@ -3,6 +3,7 @@ import os
 import pandas as pd
 from flask import Blueprint, jsonify, request
 from services.kaggle_service import kaggle_service
+from services.gdelt_service import extract_top_words, gdelt_service
 from services.reliefweb_service import reliefweb_service
 from services.worldbank_service import worldbank_service
 
@@ -354,3 +355,54 @@ def climate_news():
                 200,
             )
         return jsonify({"error": str(e)}), 500
+
+
+@climate_data_bp.route("/api/climate-news-wordmap")
+def climate_news_wordmap():
+    """Return a global word cloud for climate-change news.
+
+    Query params:
+    - timespan: e.g. 1week, 7d, 24h (optional; default 24h)
+    - maxrecords: number of articles to sample (optional; default 80; capped to 250)
+    - top: number of words to return (optional; default 60; capped to 120)
+    """
+
+    timespan = (request.args.get("timespan") or "24h").strip() or "24h"
+
+    maxrecords_raw = request.args.get("maxrecords", "80")
+    try:
+        maxrecords = int(maxrecords_raw)
+    except ValueError:
+        return jsonify({"error": "maxrecords must be an integer"}), 400
+    maxrecords = max(1, min(maxrecords, 250))
+
+    top_raw = request.args.get("top", "60")
+    try:
+        top = int(top_raw)
+    except ValueError:
+        return jsonify({"error": "top must be an integer"}), 400
+    top = max(1, min(top, 120))
+
+    try:
+        articles = gdelt_service.get_latest_climate_articles(
+            maxrecords=maxrecords,
+            timespan=timespan,
+        )
+        titles = [a.get("title", "") for a in articles if isinstance(a, dict)]
+        words = extract_top_words([t for t in titles if isinstance(t, str)], top=top)
+
+        return (
+            jsonify(
+                {
+                    "timespan": timespan,
+                    "maxrecords": maxrecords,
+                    "query": '"climate change" OR "global warming" (English sources)',
+                    "articleCount": len(articles),
+                    "articles": articles,
+                    "words": words,
+                }
+            ),
+            200,
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
