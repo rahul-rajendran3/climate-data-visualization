@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ChoroplethMap from './components/ChoroplethMap'
 import BubbleScatterPlot from './components/BubbleScatterPlot'
+import NewsWordMap from './components/NewsWordMap'
 import { formatMetric, METRIC_DESCRIPTIONS } from './utils'
 import './App.css'
 
@@ -76,10 +77,8 @@ function App() {
         )}
 
         {activeView === 'news' && (
-          <div className="section-card placeholder-card">
-            <p className="placeholder-card__text">
-              Local news integration / word map of climate change issues seen
-            </p>
+          <div className="section-card">
+            <NewsWordMap />
           </div>
         )}
       </main>
